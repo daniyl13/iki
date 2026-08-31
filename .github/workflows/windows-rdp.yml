@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # ۱. دانلود کردن سورس ریپازیتوری و فایل‌های ذخیره شده قبلی
+      # دانلود سورس ریپازیتوری با جدیدترین نسخه سازگار با Node 24
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -30,13 +30,11 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "NvDAdmin" -ErrorAction SilentlyContinue
           net user runneradmin P@ssw0rd1qazXSW@#
 
-      # ۲. آماده‌سازی پوشه دیتا در دسکتاپ بر اساس فایل‌های داخل ریپازیتوری
+      # بازیابی اطلاعات ذخیره شده قبلی
       - name: 4. Restore Data From GitHub
         run: |
           $vpsDataPath = "C:\Users\NvDAdmin\Desktop\VPS_Data"
           if (!(Test-Path $vpsDataPath)) { New-Item -ItemType Directory -Path $vpsDataPath -Force }
-          
-          # اگر از قبل پوشه دیتایی در ریپازیتوری گیت‌هاب ذخیره شده باشد، آن را به دسکتاپ منتقل می‌کند
           if (Test-Path "vps_storage") {
               Copy-Item -Path "vps_storage\*" -Destination $vpsDataPath -Recurse -Force
               Write-Host "Data restored from GitHub storage."
@@ -62,7 +60,7 @@ jobs:
           Write-Host "  >> IMPORTANT: Put all your files in 'VPS_Data' folder on Desktop!" -ForegroundColor Red
           Write-Host "==================================================" -ForegroundColor Green
 
-      # ۳. روشن نگه داشتن سرور به مدت ۵.۵ ساعت (بدون آپلود مداوم برای جلوگیری از شلوغی کامیت‌ها)
+      # روشن نگه داشتن سرور به مدت ۵.۵ ساعت
       - name: 6. Keep Server Alive (5.5 Hours)
         run: |
           for ($i = 1; $i -le 330; $i++) {
@@ -70,7 +68,7 @@ jobs:
             Write-Host "[$i/330 Min] Server running smoothly..."
           }
 
-      # ۴. جمع‌آوری فایل‌ها از دسکتاپ و آپلود (کامیت و پوش) مستقیم به داخل خود گیت‌هاب
+      # ذخیره و کامیت کردن فایل‌ها به ریپازیتوری
       - name: 7. Backup Data Back To GitHub Repo
         if: always()
         run: |
@@ -79,18 +77,16 @@ jobs:
               if (!(Test-Path "vps_storage")) { New-Item -ItemType Directory -Path "vps_storage" -Force }
               Copy-Item -Path "$vpsDataPath\*" -Destination "vps_storage" -Recurse -Force
               
-              # تنظیمات هویتی گیت برای کامیت زدن
               git config --global user.name "github-actions[bot]"
-              git config --global user.email "41182224+github-actions[bot]@://github.com"
+              git config --global user.email "41182224+github-actions[bot]@users.noreply.github.com"
               
-              # کامیت و پوش کردن تغییرات به ریپازیتوری
               git add vps_storage/
-              git commit -m "Automated backup from RDP Session [skip ci]"
+              git commit -m "Automated backup from RDP Session [skip ci]" || exit 0
               git push origin HEAD:${{ github.ref }}
               Write-Host "Data backup to GitHub completed successfully!"
           }
 
-      # ۵. استارت زدن اتوماتیک جاب بعدی بدون نیاز به هیچ توکن خارجی (با استفاده از GITHUB_TOKEN پیش‌فرض)
+      # فرستادن درخواست جاب بعدی با توکن امنیتی پیش‌فرض خود گیت‌هاب
       - name: 8. Trigger Next Job Automatically
         if: always()
         run: |
