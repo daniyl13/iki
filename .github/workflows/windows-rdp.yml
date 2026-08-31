@@ -1,4 +1,4 @@
-name: Continuous Windows Cloud RDP
+name: Pure GitHub Continuous RDP
 
 on:
   workflow_dispatch:
@@ -11,41 +11,38 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Enable Remote Desktop & Firewall
+      # ۱. دانلود کردن سورس ریپازیتوری و فایل‌های ذخیره شده قبلی
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 2. Enable Remote Desktop & Firewall
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
 
-      - name: 2. Create Admin Account
+      - name: 3. Create Admin Account
         run: |
           $Password = ConvertTo-SecureString "P@ssw0rd1qazXSW@#" -AsPlainText -Force
           New-LocalUser -Name "NvDAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "NvDAdmin" -ErrorAction SilentlyContinue
           net user runneradmin P@ssw0rd1qazXSW@#
 
-      - name: 3. Setup Rclone & Restore Data
-        env:
-          RCLONE_CONFIG_BODY: ${{ secrets.RCLONE_CONFIG_DATA }}
+      # ۲. آماده‌سازی پوشه دیتا در دسکتاپ بر اساس فایل‌های داخل ریپازیتوری
+      - name: 4. Restore Data From GitHub
         run: |
-          # دانلود و نصب چاکلتری و سپس Rclone
-          Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org'))
-          choco install rclone -y
-          
-          # ساخت فایل کانفیگ Rclone در مسیر پیش‌فرض ویندوز
-          $configPath = "$env:USERPROFILE\.config\rclone"
-          if (!(Test-Path $configPath)) { New-Item -ItemType Directory -Path $configPath -Force }
-          [System.IO.File]::WriteAllText("$configPath\rclone.conf", $env:RCLONE_CONFIG_BODY)
-          
-          # ایجاد پوشه مخصوص دیتای پایدار شما در دسکتاپ
           $vpsDataPath = "C:\Users\NvDAdmin\Desktop\VPS_Data"
           if (!(Test-Path $vpsDataPath)) { New-Item -ItemType Directory -Path $vpsDataPath -Force }
           
-          # دانلود دیتای قبلی از گوگل درایو (اگر وجود داشته باشد)
-          Write-Host "Restoring data from Google Drive..."
-          rclone sync gdrive:GitHub_RDP_Backup $vpsDataPath --vfs-cache-mode writes
+          # اگر از قبل پوشه دیتایی در ریپازیتوری گیت‌هاب ذخیره شده باشد، آن را به دسکتاپ منتقل می‌کند
+          if (Test-Path "vps_storage") {
+              Copy-Item -Path "vps_storage\*" -Destination $vpsDataPath -Recurse -Force
+              Write-Host "Data restored from GitHub storage."
+          }
 
-      - name: 4. Install & Connect Tailscale VPN
+      - name: 5. Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
@@ -65,36 +62,43 @@ jobs:
           Write-Host "  >> IMPORTANT: Put all your files in 'VPS_Data' folder on Desktop!" -ForegroundColor Red
           Write-Host "==================================================" -ForegroundColor Green
 
-      - name: 5. Keep Server Alive & Sync (5.5 Hours)
+      # ۳. روشن نگه داشتن سرور به مدت ۵.۵ ساعت (بدون آپلود مداوم برای جلوگیری از شلوغی کامیت‌ها)
+      - name: 6. Keep Server Alive (5.5 Hours)
         run: |
-          $vpsDataPath = "C:\Users\NvDAdmin\Desktop\VPS_Data"
-          # اجرای سرور به مدت ۳۳۰ دقیقه (۵.۵ ساعت)
-          # هر ۵ دقیقه یک‌بار، دیتا را در بک‌گراند روی گوگل‌درایو آپلود می‌کند تا اگر سرور ناگهانی قطع شد دیتا نپرد
-          for ($i = 1; $i -le 66; $i++) {
-            Start-Sleep -Seconds 300
-            Write-Host "[$($i*5)/330 Min] Syncing data to Google Drive..."
-            rclone sync $vpsDataPath gdrive:GitHub_RDP_Backup --vfs-cache-mode writes
+          for ($i = 1; $i -le 330; $i++) {
+            Start-Sleep -Seconds 60
+            Write-Host "[$i/330 Min] Server running smoothly..."
           }
 
-      - name: 6. Final Data Backup
+      # ۴. جمع‌آوری فایل‌ها از دسکتاپ و آپلود (کامیت و پوش) مستقیم به داخل خود گیت‌هاب
+      - name: 7. Backup Data Back To GitHub Repo
         if: always()
         run: |
-          Write-Host "Performing final backup before shutdown..."
           $vpsDataPath = "C:\Users\NvDAdmin\Desktop\VPS_Data"
-          rclone sync $vpsDataPath gdrive:GitHub_RDP_Backup --vfs-cache-mode writes
+          if (Test-Path $vpsDataPath) {
+              if (!(Test-Path "vps_storage")) { New-Item -ItemType Directory -Path "vps_storage" -Force }
+              Copy-Item -Path "$vpsDataPath\*" -Destination "vps_storage" -Recurse -Force
+              
+              # تنظیمات هویتی گیت برای کامیت زدن
+              git config --global user.name "github-actions[bot]"
+              git config --global user.email "41182224+github-actions[bot]@://github.com"
+              
+              # کامیت و پوش کردن تغییرات به ریپازیتوری
+              git add vps_storage/
+              git commit -m "Automated backup from RDP Session [skip ci]"
+              git push origin HEAD:${{ github.ref }}
+              Write-Host "Data backup to GitHub completed successfully!"
+          }
 
-      - name: 7. Trigger Next Job Automatically
+      # ۵. استارت زدن اتوماتیک جاب بعدی بدون نیاز به هیچ توکن خارجی (با استفاده از GITHUB_TOKEN پیش‌فرض)
+      - name: 8. Trigger Next Job Automatically
         if: always()
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          # این اسکریپت با API گیت‌هاب تماس گرفته و جاب بعدی را فوراً استارت می‌زند
-          $owner = "${{ github.repository_owner }}"
-          $repo = "${{ github.event.repository.name }}"
+          $repoFull = "${{ github.repository }}"
           $url = "https://github.com"
           
           $headers = @{
-              "Authorization" = "token $env:GH_PAT"
+              "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
               "Accept"        = "application/vnd.github.v3+json"
           }
           
@@ -102,5 +106,9 @@ jobs:
               "event_type" = "restart-rdp"
           } | ConvertTo-Json
           
-          Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
-          Write-Host "Next RDP job triggered successfully!"
+          try {
+              Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
+              Write-Host "Next RDP job triggered successfully!"
+          } catch {
+              Write-Error "Failed to trigger next job. Error: $_"
+          }
