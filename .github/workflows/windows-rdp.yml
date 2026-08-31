@@ -1,9 +1,7 @@
-name: Pure GitHub Continuous RDP
+name: Windows Cloud RDP
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [restart-rdp]
 
 jobs:
   build:
@@ -11,44 +9,34 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # دانلود سورس ریپازیتوری با جدیدترین نسخه سازگار با Node 24
-      - name: 1. Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: 2. Enable Remote Desktop & Firewall
+      - name: 1. Enable Remote Desktop & Firewall
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
 
-      - name: 3. Create Admin Account
+      - name: 2. Create Admin Account
         run: |
           $Password = ConvertTo-SecureString "P@ssw0rd1qazXSW@#" -AsPlainText -Force
           New-LocalUser -Name "NvDAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "NvDAdmin" -ErrorAction SilentlyContinue
           net user runneradmin P@ssw0rd1qazXSW@#
 
-      # بازیابی اطلاعات ذخیره شده قبلی
-      - name: 4. Restore Data From GitHub
-        run: |
-          $vpsDataPath = "C:\Users\NvDAdmin\Desktop\VPS_Data"
-          if (!(Test-Path $vpsDataPath)) { New-Item -ItemType Directory -Path $vpsDataPath -Force }
-          if (Test-Path "vps_storage") {
-              Copy-Item -Path "vps_storage\*" -Destination $vpsDataPath -Recurse -Force
-              Write-Host "Data restored from GitHub storage."
-          }
-
-      - name: 5. Install & Connect Tailscale VPN
+      - name: 3. Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          Invoke-WebRequest "https://tailscale.com" -OutFile "C:\tailscale.msi"
+          # Download and install Tailscale silently
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile "C:\tailscale.msi"
           Start-Process msiexec -ArgumentList "/i C:\tailscale.msi /quiet /norestart" -Wait
+          
+          # Connect to Tailscale network
           Start-Sleep -Seconds 5
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="github-rdp-server" --accept-routes
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="github-rdp-server"
+          
           Start-Sleep -Seconds 8
+          
+          # Get Tailscale IP
           $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           
           Write-Host ""
@@ -57,54 +45,12 @@ jobs:
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
           Write-Host "  Username     : NvdAdmin" -ForegroundColor Yellow
           Write-Host "  Password     : P@ssw0rd1qazXSW@#" -ForegroundColor Yellow
-          Write-Host "  >> IMPORTANT: Put all your files in 'VPS_Data' folder on Desktop!" -ForegroundColor Red
+          Write-Host "  >> Open mstsc and connect to: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
-      # روشن نگه داشتن سرور به مدت ۵.۵ ساعت
-      - name: 6. Keep Server Alive (5.5 Hours)
+      - name: 4. Keep Server Alive (48 Hours)
         run: |
-          for ($i = 1; $i -le 330; $i++) {
+          for ($i = 1; $i -le 2880; $i++) {
             Start-Sleep -Seconds 60
-            Write-Host "[$i/330 Min] Server running smoothly..."
-          }
-
-      # ذخیره و کامیت کردن فایل‌ها به ریپازیتوری
-      - name: 7. Backup Data Back To GitHub Repo
-        if: always()
-        run: |
-          $vpsDataPath = "C:\Users\NvDAdmin\Desktop\VPS_Data"
-          if (Test-Path $vpsDataPath) {
-              if (!(Test-Path "vps_storage")) { New-Item -ItemType Directory -Path "vps_storage" -Force }
-              Copy-Item -Path "$vpsDataPath\*" -Destination "vps_storage" -Recurse -Force
-              
-              git config --global user.name "github-actions[bot]"
-              git config --global user.email "41182224+github-actions[bot]@users.noreply.github.com"
-              
-              git add vps_storage/
-              git commit -m "Automated backup from RDP Session [skip ci]" || exit 0
-              git push origin HEAD:${{ github.ref }}
-              Write-Host "Data backup to GitHub completed successfully!"
-          }
-
-      # فرستادن درخواست جاب بعدی با توکن امنیتی پیش‌فرض خود گیت‌هاب
-      - name: 8. Trigger Next Job Automatically
-        if: always()
-        run: |
-          $repoFull = "${{ github.repository }}"
-          $url = "https://github.com"
-          
-          $headers = @{
-              "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
-              "Accept"        = "application/vnd.github.v3+json"
-          }
-          
-          $body = @{
-              "event_type" = "restart-rdp"
-          } | ConvertTo-Json
-          
-          try {
-              Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
-              Write-Host "Next RDP job triggered successfully!"
-          } catch {
-              Write-Error "Failed to trigger next job. Error: $_"
+            Write-Host "[$i/2880] Server running..."
           }
