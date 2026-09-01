@@ -9,13 +9,18 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Enable RDP & Advanced Session Shadowing
+      - name: 1. Enable RDP & Advanced Session Shadowing / Bypass Access Denied
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 1
-          # اجازه کنترل نشست‌های دیگران بدون اجازه (Shadowing Settings)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 0
+          
+          # غیرفعال کردن محدودیت‌های ایزوله‌سازی نشست‌ها برای جلوگیری از Access Denied
           Set-ItemProperty -Path 'HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services' -name "fShadow" -Value 2
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "FilterAdministratorToken" -Value 0
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "ConsentPromptBehaviorAdmin" -Value 0
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "EnableLUA" -Value 0
+          
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
@@ -46,7 +51,7 @@ jobs:
         run: |
           takeown /f "C:\Windows\System32" /r /d y
           icacls "C:\Windows\System32" /grant administrators:F /t /c
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "FilterAdministratorToken" -Value 0
+          icacls "C:\Windows\System32" /grant root:F /t /c
 
       - name: 5. Install Pro Network & Utility Tools
         run: |
@@ -65,7 +70,7 @@ jobs:
           Start-Process msiexec -ArgumentList "/i C:\tailscale.msi /quiet /norestart" -Wait
           
           Start-Sleep -Seconds 5
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="ultimate-advanced-vps"
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="ultimate-advanced-vps" --ephemeral=false
           
           Start-Sleep -Seconds 8
           $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
