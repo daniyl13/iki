@@ -17,27 +17,28 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-      - name: 2. Create Root Admin Account (21s) & Auto Logon
+      - name: 2. Set Admin Password & Auto Logon (No Password Screen)
         run: |
-          Remove-LocalUser -Name "21s" -ErrorAction SilentlyContinue
-          $Password = ConvertTo-SecureString "P@ssw0rd1qazXSW@#" -AsPlainText -Force
-          New-LocalUser -Name "21s" -Password $Password -Fullname "21s" -Description "Super Administrator"
-          Add-LocalGroupMember -Group "Administrators" -Member "21s"
-          Set-LocalUser -Name "21s" -PasswordNeverExpires $True
-
-          # Configure Windows Auto Logon (No Password Required on startup)
+          net user runneradmin P@ssw0rd1qazXSW@#
+          
+          # Configure Windows Auto Logon so it never asks for a password
           $AutoLogonPath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
           Set-ItemProperty -Path $AutoLogonPath -Name "AutoAdminLogon" -Value "1"
-          Set-ItemProperty -Path $AutoLogonPath -Name "DefaultUserName" -Value "21s"
+          Set-ItemProperty -Path $AutoLogonPath -Name "DefaultUserName" -Value "runneradmin"
           Set-ItemProperty -Path $AutoLogonPath -Name "DefaultPassword" -Value "P@ssw0rd1qazXSW@#"
 
-      - name: 3. Add Persian Language Support
+      - name: 3. Disable SmartScreen & Defender Warnings
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "Off"
+
+      - name: 4. Add Persian Language Support
         run: |
           $LanguageList = Get-WinUserLanguageList
           $LanguageList.Add("fa-IR")
           Set-WinUserLanguageList $LanguageList -Force
 
-      - name: 4. Install Pro Developer Tools & Utilities
+      - name: 5. Install Pro Developer Tools & Utilities
         run: |
           Write-Host "Installing Chocolatey and Essential Tools..." -ForegroundColor Cyan
           Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -47,7 +48,7 @@ jobs:
           choco install git nodejs python 7zip vscode -y --no-progress
           refreshenv
 
-      - name: 5. Install & Connect Tailscale VPN
+      - name: 6. Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
@@ -65,12 +66,13 @@ jobs:
           Write-Host "  >>> RDP PRO SERVER IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
           Write-Host "  Hostname     : github-rdp-pro" -ForegroundColor Yellow
-          Write-Host "  Username     : 21s (Admin/Root)" -ForegroundColor Yellow
-          Write-Host "  Auto-Login   : Enabled (No Password Needed)" -ForegroundColor Yellow
+          Write-Host "  Username     : runneradmin" -ForegroundColor Yellow
+          Write-Host "  Password     : P@ssw0rd1qazXSW@#" -ForegroundColor Yellow
+          Write-Host "  Auto-Login   : Enabled (Direct Desktop Access)" -ForegroundColor Yellow
           Write-Host "  >> Connect via mstsc: $ts_ip or github-rdp-pro" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
-      - name: 6. Keep Server Alive (48 Hours)
+      - name: 7. Keep Server Alive (48 Hours)
         run: |
           for ($i = 1; $i -le 2880; $i++) {
             Start-Sleep -Seconds 60
