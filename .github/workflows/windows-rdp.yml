@@ -9,23 +9,17 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Enable Remote Desktop & Advanced Firewall
+      - name: 1. Enable Remote Desktop & Firewall
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 1
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-      - name: 2. Set Admin Password & Auto Logon (No Password Screen)
+      - name: 2. Set Admin Password
         run: |
           net user runneradmin P@ssw0rd1qazXSW@#
-          
-          # Configure Windows Auto Logon so it never asks for a password
-          $AutoLogonPath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
-          Set-ItemProperty -Path $AutoLogonPath -Name "AutoAdminLogon" -Value "1"
-          Set-ItemProperty -Path $AutoLogonPath -Name "DefaultUserName" -Value "runneradmin"
-          Set-ItemProperty -Path $AutoLogonPath -Name "DefaultPassword" -Value "P@ssw0rd1qazXSW@#"
 
       - name: 3. Disable SmartScreen & Defender Warnings
         run: |
@@ -68,7 +62,6 @@ jobs:
           Write-Host "  Hostname     : github-rdp-pro" -ForegroundColor Yellow
           Write-Host "  Username     : runneradmin" -ForegroundColor Yellow
           Write-Host "  Password     : P@ssw0rd1qazXSW@#" -ForegroundColor Yellow
-          Write-Host "  Auto-Login   : Enabled (Direct Desktop Access)" -ForegroundColor Yellow
           Write-Host "  >> Connect via mstsc: $ts_ip or github-rdp-pro" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
