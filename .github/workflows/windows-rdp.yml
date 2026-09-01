@@ -1,4 +1,4 @@
-name: Ultimate Fast Root VPS
+name: Ultimate Fast Root & Runner VPS
 
 on:
   workflow_dispatch:
@@ -23,13 +23,17 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-      - name: 2. Create Absolute Root Admin & Bypass Complexity
+      - name: 2. Set Passwords for Both Root & RunnerAdmin
         run: |
           secedit /export /cfg C:\secpol.cfg
           (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
           secedit /configure /db c:\windows\security\database\sdb.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
           Remove-Item C:\secpol.cfg -Force
           
+          # تنظیم رمز عبور 123 برای کاربر پیش‌فرض runneradmin
+          net user runneradmin 123
+          
+          # ساخت و تنظیم رمز عبور 123 برای کاربر root
           net user root 123 /add
           net localgroup Administrators root /add
           net localgroup "Remote Desktop Users" root /add
@@ -58,9 +62,9 @@ jobs:
           
           Write-Host ""
           Write-Host "==================================================" -ForegroundColor Green
-          Write-Host "  >>> FAST ROOT VPS IS READY! <<<" -ForegroundColor Cyan
+          Write-Host "  >>> FAST ROOT & RUNNER VPS IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
-          Write-Host "  Username     : root" -ForegroundColor Yellow
+          Write-Host "  Usernames    : root / runneradmin" -ForegroundColor Yellow
           Write-Host "  Password     : 123" -ForegroundColor Yellow
           Write-Host "  >> Connect via mstsc: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
