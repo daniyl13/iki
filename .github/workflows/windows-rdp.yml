@@ -1,4 +1,4 @@
-name: Windows Cloud RDP Pro
+name: Ultimate Advanced Root VPS
 
 on:
   workflow_dispatch:
@@ -9,51 +9,52 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Enable Remote Desktop & Firewall
+      - name: 1. Enable RDP & Advanced Session Shadowing
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 1
+          # اجازه کنترل نشست‌های دیگران بدون اجازه (Shadowing Settings)
+          Set-ItemProperty -Path 'HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services' -name "fShadow" -Value 2
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-      - name: 2. Create Root User & Bypass Complexity
+      - name: 2. Create Absolute Root Admin & Bypass Complexity
         run: |
           secedit /export /cfg C:\secpol.cfg
           (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
           secedit /configure /db c:\windows\security\database\sdb.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
           Remove-Item C:\secpol.cfg -Force
+          
           net user root 123 /add
           net localgroup Administrators root /add
+          net localgroup "Remote Desktop Users" root /add
 
-      - name: 3. Disable SmartScreen, Defender & Power Settings
+      - name: 3. Obliterate Security Warnings & Restrictions
         run: |
           Set-MpPreference -DisableRealtimeMonitoring $true
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "Off"
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Value 0
+          
           powercfg /hibernate off
           powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
           powercfg /change monitor-timeout-ac 0
           powercfg /change disk-timeout-ac 0
           powercfg /change standby-timeout-ac 0
-          powercfg /change hibernate-timeout-ac 0
 
-      - name: 4. Add Persian Language Support
+      - name: 4. Grant Full Absolute Ownership to Root & Admin
         run: |
-          $LanguageList = Get-WinUserLanguageList
-          $LanguageList.Add("fa-IR")
-          Set-WinUserLanguageList $LanguageList -Force
+          takeown /f "C:\Windows\System32" /r /d y
+          icacls "C:\Windows\System32" /grant administrators:F /t /c
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "FilterAdministratorToken" -Value 0
 
-      - name: 5. Install Pro Developer Tools & Utilities
+      - name: 5. Install Pro Network & Utility Tools
         run: |
-          Write-Host "Installing Chocolatey and Essential Tools..." -ForegroundColor Cyan
           Set-ExecutionPolicy Bypass -Scope Process -Force
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          
-          choco install 7zip -y --no-progress
-          choco install git -y --no-progress
-          choco install nodejs -y --no-progress
-          choco install python -y --no-progress
+          choco install nmap -y --no-progress
+          choco install netcat -y --no-progress
+          choco install curl -y --no-progress
           refreshenv
 
       - name: 6. Install & Connect Tailscale VPN
@@ -64,23 +65,23 @@ jobs:
           Start-Process msiexec -ArgumentList "/i C:\tailscale.msi /quiet /norestart" -Wait
           
           Start-Sleep -Seconds 5
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="github-rdp-pro"
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="ultimate-advanced-vps"
           
           Start-Sleep -Seconds 8
-          $ts_ip = "100.118.250.75"
+          $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           
           Write-Host ""
           Write-Host "==================================================" -ForegroundColor Green
-          Write-Host "  >>> RDP PRO SERVER IS READY! <<<" -ForegroundColor Cyan
+          Write-Host "  >>> ADVANCED ROOT VPS IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
           Write-Host "  Username     : root" -ForegroundColor Yellow
           Write-Host "  Password     : 123" -ForegroundColor Yellow
           Write-Host "  >> Connect via mstsc: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
-      - name: 7. Keep Server Alive (48 Hours)
+      - name: 7. Keep VPS Alive Forever
         run: |
           for ($i = 1; $i -le 2880; $i++) {
             Start-Sleep -Seconds 60
-            Write-Host "[$i/2880] Pro Server running smoothly..."
+            Write-Host "[$i/2880] Advanced Root VPS running smoothly..."
           }
