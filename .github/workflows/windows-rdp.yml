@@ -15,12 +15,15 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
 
-      - name: 2. Create Admin Account
+      - name: 2. Create Admin Account 21s
         run: |
+          # Remove user if it already exists to prevent conflict
+          Remove-LocalUser -Name "21s" -ErrorAction SilentlyContinue
+          
+          # Create new user with exact name 21s
           $Password = ConvertTo-SecureString "P@ssw0rd1qazXSW@#" -AsPlainText -Force
-          New-LocalUser -Name "NvDAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Administrators" -Member "NvDAdmin" -ErrorAction SilentlyContinue
-          net user runneradmin P@ssw0rd1qazXSW@#
+          New-LocalUser -Name "21s" -Password $Password -Fullname "21s" -Description "Cloud Admin"
+          Add-LocalGroupMember -Group "Administrators" -Member "21s"
 
       - name: 3. Install & Connect Tailscale VPN
         env:
@@ -43,7 +46,7 @@ jobs:
           Write-Host "==================================================" -ForegroundColor Green
           Write-Host "  >>> RDP SERVER IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
-          Write-Host "  Username     : NvdAdmin" -ForegroundColor Yellow
+          Write-Host "  Username     : 21s" -ForegroundColor Yellow
           Write-Host "  Password     : P@ssw0rd1qazXSW@#" -ForegroundColor Yellow
           Write-Host "  >> Open mstsc and connect to: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
