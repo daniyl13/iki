@@ -1,4 +1,4 @@
-name: Windows Cloud RDP
+name: Windows Cloud RDP Pro
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Enable Remote Desktop & Firewall
+      - name: 1. Enable Remote Desktop & Advanced Firewall
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
@@ -17,14 +17,27 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-      - name: 2. Create Admin Account 21s
+      - name: 2. Create Root Admin Account (21s)
         run: |
           Remove-LocalUser -Name "21s" -ErrorAction SilentlyContinue
           $Password = ConvertTo-SecureString "P@ssw0rd1qazXSW@#" -AsPlainText -Force
-          New-LocalUser -Name "21s" -Password $Password -Fullname "21s" -Description "Cloud Admin"
+          New-LocalUser -Name "21s" -Password $Password -Fullname "21s" -Description "Super Administrator"
           Add-LocalGroupMember -Group "Administrators" -Member "21s"
+          # Ensure account is active and password never expires
+          Set-LocalUser -Name "21s" -PasswordNeverExpires $True
 
-      - name: 3. Install & Connect Tailscale VPN
+      - name: 3. Install Pro Developer Tools & Utilities
+        run: |
+          Write-Host "Installing Chocolatey and Essential Tools..." -ForegroundColor Cyan
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          
+          # Install useful CLI and developer packages silently
+          choco install git nodejs python 7zip vscode -y --no-progress
+          refreshenv
+
+      - name: 4. Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
@@ -32,24 +45,24 @@ jobs:
           Start-Process msiexec -ArgumentList "/i C:\tailscale.msi /quiet /norestart" -Wait
           
           Start-Sleep -Seconds 5
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="github-rdp-server"
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="github-rdp-pro"
           
           Start-Sleep -Seconds 8
           $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           
           Write-Host ""
           Write-Host "==================================================" -ForegroundColor Green
-          Write-Host "  >>> RDP SERVER IS READY! <<<" -ForegroundColor Cyan
+          Write-Host "  >>> RDP PRO SERVER IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
-          Write-Host "  Hostname     : github-rdp-server" -ForegroundColor Yellow
-          Write-Host "  Username     : 21s" -ForegroundColor Yellow
+          Write-Host "  Hostname     : github-rdp-pro" -ForegroundColor Yellow
+          Write-Host "  Username     : 21s (Admin/Root)" -ForegroundColor Yellow
           Write-Host "  Password     : P@ssw0rd1qazXSW@#" -ForegroundColor Yellow
-          Write-Host "  >> Open mstsc and connect to: github-rdp-server" -ForegroundColor Magenta
+          Write-Host "  >> Connect via mstsc: $ts_ip or github-rdp-pro" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
-      - name: 4. Keep Server Alive (48 Hours)
+      - name: 5. Keep Server Alive (48 Hours)
         run: |
           for ($i = 1; $i -le 2880; $i++) {
             Start-Sleep -Seconds 60
-            Write-Host "[$i/2880] Server running..."
+            Write-Host "[$i/2880] Pro Server running smoothly..."
           }
