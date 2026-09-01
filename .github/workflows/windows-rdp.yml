@@ -17,14 +17,25 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-      - name: 2. Set Admin Password
+      - name: 2. Create Root User & Bypass Complexity
         run: |
-          net user runneradmin P@ssw0rd1qazXSW@#
+          secedit /export /cfg C:\secpol.cfg
+          (Get-Content C:\secpol.cfg) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | Set-Content C:\secpol.cfg
+          secedit /configure /db c:\windows\security\database\sdb.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
+          Remove-Item C:\secpol.cfg -Force
+          net user root 123 /add
+          net localgroup Administrators root /add
 
-      - name: 3. Disable SmartScreen & Defender Warnings
+      - name: 3. Disable SmartScreen, Defender & Power Settings
         run: |
           Set-MpPreference -DisableRealtimeMonitoring $true
           Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "Off"
+          powercfg /hibernate off
+          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+          powercfg /change monitor-timeout-ac 0
+          powercfg /change disk-timeout-ac 0
+          powercfg /change standby-timeout-ac 0
+          powercfg /change hibernate-timeout-ac 0
 
       - name: 4. Add Persian Language Support
         run: |
@@ -39,7 +50,6 @@ jobs:
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
           
-          # Install tools individually to prevent total failure if one package hangs
           choco install 7zip -y --no-progress
           choco install git -y --no-progress
           choco install nodejs -y --no-progress
@@ -57,16 +67,15 @@ jobs:
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="github-rdp-pro"
           
           Start-Sleep -Seconds 8
-          $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          $ts_ip = "100.118.250.75"
           
           Write-Host ""
           Write-Host "==================================================" -ForegroundColor Green
           Write-Host "  >>> RDP PRO SERVER IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
-          Write-Host "  Hostname     : github-rdp-pro" -ForegroundColor Yellow
-          Write-Host "  Username     : runneradmin" -ForegroundColor Yellow
-          Write-Host "  Password     : P@ssw0rd1qazXSW@#" -ForegroundColor Yellow
-          Write-Host "  >> Connect via mstsc: $ts_ip or github-rdp-pro" -ForegroundColor Magenta
+          Write-Host "  Username     : root" -ForegroundColor Yellow
+          Write-Host "  Password     : 123" -ForegroundColor Yellow
+          Write-Host "  >> Connect via mstsc: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
       - name: 7. Keep Server Alive (48 Hours)
