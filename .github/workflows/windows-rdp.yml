@@ -39,7 +39,11 @@ jobs:
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
           iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
           
-          choco install git nodejs python 7zip vscode -y --no-progress
+          # Install tools individually to prevent total failure if one package hangs
+          choco install 7zip -y --no-progress
+          choco install git -y --no-progress
+          choco install nodejs -y --no-progress
+          choco install python -y --no-progress
           refreshenv
 
       - name: 6. Install & Connect Tailscale VPN
