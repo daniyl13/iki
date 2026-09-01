@@ -1,4 +1,4 @@
-name: Ultimate Advanced Root VPS
+name: Ultimate Fast Root VPS
 
 on:
   workflow_dispatch:
@@ -9,13 +9,12 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Enable RDP & Advanced Session Shadowing / Bypass Access Denied
+      - name: 1. Configure RDP, Sessions & Bypass Security
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 0
           
-          # غیرفعال کردن محدودیت‌های ایزوله‌سازی نشست‌ها برای جلوگیری از Access Denied
           Set-ItemProperty -Path 'HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services' -name "fShadow" -Value 2
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "FilterAdministratorToken" -Value 0
           Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "ConsentPromptBehaviorAdmin" -Value 0
@@ -35,58 +34,39 @@ jobs:
           net localgroup Administrators root /add
           net localgroup "Remote Desktop Users" root /add
 
-      - name: 3. Obliterate Security Warnings & Restrictions
+      - name: 3. Disable Defender & Power Savings
         run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" -Name "SmartScreenEnabled" -Value "Off"
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Value 0
-          
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
           powercfg /hibernate off
           powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
           powercfg /change monitor-timeout-ac 0
           powercfg /change disk-timeout-ac 0
           powercfg /change standby-timeout-ac 0
 
-      - name: 4. Grant Full Absolute Ownership to Root & Admin
-        run: |
-          takeown /f "C:\Windows\System32" /r /d y
-          icacls "C:\Windows\System32" /grant administrators:F /t /c
-          icacls "C:\Windows\System32" /grant root:F /t /c
-
-      - name: 5. Install Pro Network & Utility Tools
-        run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          choco install nmap -y --no-progress
-          choco install netcat -y --no-progress
-          choco install curl -y --no-progress
-          refreshenv
-
-      - name: 6. Install & Connect Tailscale VPN
+      - name: 4. Fast Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile "C:\tailscale.msi"
           Start-Process msiexec -ArgumentList "/i C:\tailscale.msi /quiet /norestart" -Wait
           
-          Start-Sleep -Seconds 5
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="ultimate-advanced-vps" --ephemeral=false
+          Start-Sleep -Seconds 3
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="fast-root-vps"
           
-          Start-Sleep -Seconds 8
+          Start-Sleep -Seconds 5
           $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           
           Write-Host ""
           Write-Host "==================================================" -ForegroundColor Green
-          Write-Host "  >>> ADVANCED ROOT VPS IS READY! <<<" -ForegroundColor Cyan
+          Write-Host "  >>> FAST ROOT VPS IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
           Write-Host "  Username     : root" -ForegroundColor Yellow
           Write-Host "  Password     : 123" -ForegroundColor Yellow
           Write-Host "  >> Connect via mstsc: $ts_ip" -ForegroundColor Magenta
           Write-Host "==================================================" -ForegroundColor Green
 
-      - name: 7. Keep VPS Alive Forever
+      - name: 5. Keep VPS Alive Forever
         run: |
           for ($i = 1; $i -le 2880; $i++) {
             Start-Sleep -Seconds 60
-            Write-Host "[$i/2880] Advanced Root VPS running smoothly..."
           }
