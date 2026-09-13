@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: 1. Configure RDP, Sessions & Bypass Security
+      - name: 1. Configure RDP, SSH, Sessions & Bypass Security
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
@@ -23,6 +23,12 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
+          # Install and Configure OpenSSH Server
+          Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 -ErrorAction SilentlyContinue
+          Start-Service sshd
+          Set-Service -Name sshd -StartupType 'Automatic'
+          Enable-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue
+
       - name: 2. Set Passwords for Both Root & RunnerAdmin
         run: |
           secedit /export /cfg C:\secpol.cfg
@@ -35,10 +41,8 @@ jobs:
           secedit /configure /db c:\windows\security\database\sdb.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
           Remove-Item C:\secpol.cfg -Force
           
-          # تنظیم رمز عبور 123 برای کاربر پیش‌فرض runneradmin
           net user runneradmin 123
           
-          # ساخت و تنظیم رمز عبور 123 برای کاربر root
           net user root 123 /add
           net localgroup Administrators root /add
           net localgroup "Remote Desktop Users" root /add
@@ -72,6 +76,9 @@ jobs:
           Write-Host "  Usernames    : root / runneradmin" -ForegroundColor Yellow
           Write-Host "  Password     : 123" -ForegroundColor Yellow
           Write-Host "  >> Connect via mstsc: $ts_ip" -ForegroundColor Magenta
+          Write-Host "  >> Connect via SSH CMD:" -ForegroundColor Magenta
+          Write-Host "     ssh root@$ts_ip" -ForegroundColor White
+          Write-Host "     ssh runneradmin@$ts_ip" -ForegroundColor White
           Write-Host "==================================================" -ForegroundColor Green
 
       - name: 5. Keep VPS Alive Forever
