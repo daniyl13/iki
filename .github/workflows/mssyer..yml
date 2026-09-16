@@ -14,36 +14,37 @@ jobs:
 
       - name: Run Complete Configuration
         run: |
-          set -e # جلوگیری از توقف با خطاهای کاذب
+          set -e
 
           echo "=== 1. Creating Secure Admin User ==="
-          # حل باگ کاربر ادمین با تغییر نام به aiadmin و ساخت اصولی آن
           sudo useradd -m -s /bin/bash -p "$(openssl passwd -1 123)" aiadmin || true
           sudo usermod -aG sudo aiadmin || true
 
           echo "=== 2. Configuring SSH Service ==="
           sudo apt-get update -y
-          sudo apt-get install -y openssh-server
+          sudo apt-get install -y openssh-server curl
           sudo systemctl enable ssh
           sudo systemctl restart ssh
 
           echo "=== 3. Installing Official Ollama AI ==="
-          curl -fsSL https://ollama.com | sh
+          # دانلود اسکریپت در یک فایل مجزا برای جلوگیری از خطای پایپ و سینتکس شبکه
+          curl -fsSL https://ollama.com -o install_ollama.sh
+          chmod +x install_ollama.sh
+          sudo ./install_ollama.sh
 
           echo "=== 4. Activating External Web API & CORS ==="
+          # ایجاد پوشه تنظیمات بدون استفاده از ساختار خطرساز cat <<EOF
           sudo mkdir -p /etc/systemd/system/ollama.service.d
-          sudo bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf <<EOF
-          [Service]
-          Environment="OLLAMA_HOST=0.0.0.0:11434"
-          Environment="OLLAMA_ORIGINS=*"
-          EOF'
+          echo '[Service]' | sudo tee /etc/systemd/system/ollama.service.d/override.conf
+          echo 'Environment="OLLAMA_HOST=0.0.0.0:11434"' | sudo tee -a /etc/systemd/system/ollama.service.d/override.conf
+          echo 'Environment="OLLAMA_ORIGINS=*"' | sudo tee -a /etc/systemd/system/ollama.service.d/override.conf
 
           sudo systemctl daemon-reload
           sudo systemctl enable ollama
           sudo systemctl restart ollama
 
           echo "=== 5. Pulling Qwen 2.5 Coding Model ==="
-          # استفاده از نسخه سبک‌تر و پایدارتر برای محیط کلود اکشنز
+          # دانلود نسخه کاملاً بهینه شده برای پردازنده‌های کلود بدون کرش رم
           ollama pull qwen2.5-coder:1.5b
 
           echo "=== 6. Extracting Server IP ==="
@@ -59,12 +60,10 @@ jobs:
           echo "  MODEL:       qwen2.5-coder:1.5b"
           echo "=================================================="
           
-          echo "=== 7. Starting Local Chat Interface inside Terminal ==="
-          echo "You can type and test your model directly right here:"
-          echo "--------------------------------------------------"
-          
-          # اجرای مستقیم مدل در محیط لاگ گیت‌هاب تا بدون نیاز به آی‌پابلیک بتوانید از آن استفاده کنید
-          ollama run qwen2.5-coder:1.5b "Hello, introduce yourself briefly."
+          echo "=== 7. Testing Ollama Connection ==="
+          echo "Verifying local Ollama endpoint response:"
+          curl -s http://127.0.0
+          echo ""
 
           # زنده نگه داشتن سرور برای پردازش‌های بعدی
           echo "Keeping server alive..."
