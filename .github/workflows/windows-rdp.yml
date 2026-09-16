@@ -1,158 +1,144 @@
-name: AI VPS 10 Session Persistent
+- name: Setup SSH User
+  run: |
 
-on:
-  workflow_dispatch:
+    sudo apt update
 
-permissions:
-  actions: write
-  contents: read
+    sudo apt install -y openssh-server curl wget
 
 
-jobs:
+    sudo useradd -m -s /bin/bash Neotenet || true
 
-  session-1:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
+    echo "Neotenet:neo_tenet" | sudo chpasswd
 
-    steps:
 
-    - uses: actions/checkout@v4
+    sudo usermod -aG sudo Neotenet
 
 
-    - name: Setup User
-      run: |
-        sudo useradd -m -s /bin/bash Neotenet || true
-        echo "Neotenet:neo_tenet" | sudo chpasswd
-        sudo usermod -aG sudo Neotenet
+    sudo systemctl enable ssh
 
-        sudo mkdir -p /home/Neotenet/workspace
-        sudo chown -R Neotenet:Neotenet /home/Neotenet
+    sudo systemctl restart ssh
 
 
-    - name: Install AI
-      run: |
 
-        curl -fsSL https://ollama.com/install.sh | sh
 
-        sudo mkdir -p /home/Neotenet/workspace/ollama
+- name: Install Tailscale
+  env:
+    TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-        echo "export OLLAMA_MODELS=/home/Neotenet/workspace/ollama" \
-        | sudo tee /etc/profile.d/ollama.sh
+  run: |
 
+    curl -fsSL https://tailscale.com/install.sh | sh
 
-        ollama serve &
 
-        sleep 10
+    sudo tailscale up \
+    --authkey="$TAILSCALE_AUTHKEY" \
+    --hostname="ai-vps-${{ github.run_id }}"
 
-        ollama pull qwen2.5:3b || true
 
 
+    sleep 10
 
-    - name: Timer
-      run: |
 
-        sleep 19800
 
+    IP=$(tailscale ip -4)
 
 
-    - name: Backup
-      if: always()
-      run: |
+    echo "=============================="
 
-        sudo tar -czf /tmp/ai-backup.tar.gz \
-        /home/Neotenet \
-        /etc/profile.d/ollama.sh \
-        /usr/local/bin \
-        || true
+    echo "AI VPS READY"
 
+    echo ""
 
+    echo "SSH USER:"
+    echo "Neotenet"
 
-    - name: Upload Backup
-      uses: actions/upload-artifact@v4
-      with:
+    echo "PASSWORD:"
+    echo "neo_tenet"
 
-        name: ai-backup-1
 
-        path: /tmp/ai-backup.tar.gz
+    echo ""
 
-        retention-days: 1
+    echo "SSH COMMAND:"
+    echo "ssh Neotenet@$IP"
 
 
+    echo ""
 
-  session-2:
-    needs: session-1
-    if: always()
+    echo "OLLAMA API:"
+    echo "http://$IP:11434"
 
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
 
+    echo ""
 
-    steps:
+    echo "OPENAI API:"
+    echo "http://$IP:11434/v1"
 
-    - uses: actions/checkout@v4
 
+    echo ""
 
-    - name: Download Backup
-      uses: actions/download-artifact@v4
+    echo "CHAT API:"
+    echo "http://$IP:11434/api/chat"
 
-      with:
 
-        name: ai-backup-1
+    echo "=============================="
 
-        path: /tmp
 
 
 
-    - name: Restore
 
-      run: |
+- name: Install AI
+  run: |
 
-        sudo tar -xzf /tmp/ai-backup.tar.gz -C /
 
+    curl -fsSL https://ollama.com/install.sh | sh
 
 
-    - name: Continue AI
 
-      run: |
+    mkdir -p /home/Neotenet/workspace/models
 
-        curl -fsSL https://ollama.com/install.sh | sh || true
 
-        ollama serve &
 
-        sleep 10
+    export OLLAMA_MODELS=/home/Neotenet/workspace/models
 
 
 
-    - name: Timer
+    nohup ollama serve \
+    > /home/Neotenet/workspace/ollama.log 2>&1 &
 
-      run: |
 
-        sleep 19800
 
+    sleep 20
 
 
-    - name: Backup
 
-      if: always()
+    ollama pull qwen2.5-coder:3b
 
-      run: |
 
-        sudo tar -czf /tmp/ai-backup.tar.gz \
-        /home/Neotenet \
-        /etc/profile.d/ollama.sh \
-        /usr/local/bin \
-        || true
 
 
+- name: Enable API
+  run: |
 
-    - name: Upload
 
-      uses: actions/upload-artifact@v4
+    sudo bash -c 'cat > /etc/systemd/system/ollama.service <<EOF
 
-      with:
+[Service]
 
-        name: ai-backup-2
+Environment="OLLAMA_HOST=0.0.0.0:11434"
 
-        path: /tmp/ai-backup.tar.gz
+ExecStart=/usr/local/bin/ollama serve
 
-        retention-days: 1
+Restart=always
+
+
+[Install]
+
+WantedBy=multi-user.target
+
+EOF'
+
+
+
+    sudo systemctl daemon-reload
+
+    sudo systemctl restart ollama
