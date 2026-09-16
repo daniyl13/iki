@@ -1,88 +1,158 @@
-name: Ultimate Fast Root & Runner VPS
+name: AI VPS 10 Session Persistent
 
 on:
   workflow_dispatch:
 
+permissions:
+  actions: write
+  contents: read
+
+
 jobs:
-  build:
-    runs-on: windows-latest
+
+  session-1:
+    runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
-      - name: 1. Configure RDP, SSH, Sessions & Bypass Security
-        run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 0
-          
-          Set-ItemProperty -Path 'HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services' -name "fShadow" -Value 2
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "FilterAdministratorToken" -Value 0
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "ConsentPromptBehaviorAdmin" -Value 0
-          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -name "EnableLUA" -Value 0
-          
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-NetFirewallRule -DisplayGroup "Remote Desktop" -Enabled True -Direction Inbound
 
-          # Install and Configure OpenSSH Server
-          Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 -ErrorAction SilentlyContinue
-          Start-Service sshd
-          Set-Service -Name sshd -StartupType 'Automatic'
-          Enable-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue
+    - uses: actions/checkout@v4
 
-      - name: 2. Set Passwords for Both Root & RunnerAdmin
-        run: |
-          secedit /export /cfg C:\secpol.cfg
-          $content = Get-Content C:\secpol.cfg -Raw
-          $content = $content -replace 'PasswordComplexity\s*=\s*1', 'PasswordComplexity = 0'
-          if ($content -notmatch 'PasswordComplexity') {
-              $content = $content -replace '\[System Access\]', "[System Access]`r`nPasswordComplexity = 0"
-          }
-          Set-Content C:\secpol.cfg -Value $content -Encoding Unicode
-          secedit /configure /db c:\windows\security\database\sdb.sdb /cfg C:\secpol.cfg /areas SECURITYPOLICY
-          Remove-Item C:\secpol.cfg -Force
-          
-          net user runneradmin 123
-          
-          net user root 123 /add
-          net localgroup Administrators root /add
-          net localgroup "Remote Desktop Users" root /add
 
-      - name: 3. Disable Defender & Power Savings
-        run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          powercfg /hibernate off
-          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
-          powercfg /change monitor-timeout-ac 0
-          powercfg /change disk-timeout-ac 0
-          powercfg /change standby-timeout-ac 0
+    - name: Setup User
+      run: |
+        sudo useradd -m -s /bin/bash Neotenet || true
+        echo "Neotenet:neo_tenet" | sudo chpasswd
+        sudo usermod -aG sudo Neotenet
 
-      - name: 4. Fast Install & Connect Tailscale VPN
-        env:
-          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-        run: |
-          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile "C:\tailscale.msi"
-          Start-Process msiexec -ArgumentList "/i C:\tailscale.msi /quiet /norestart" -Wait
-          
-          Start-Sleep -Seconds 3
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="$Env:TAILSCALE_AUTHKEY" --hostname="fast-root-vps"
-          
-          Start-Sleep -Seconds 5
-          $ts_ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
-          
-          Write-Host ""
-          Write-Host "==================================================" -ForegroundColor Green
-          Write-Host "  >>> FAST ROOT & RUNNER VPS IS READY! <<<" -ForegroundColor Cyan
-          Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
-          Write-Host "  Usernames    : root / runneradmin" -ForegroundColor Yellow
-          Write-Host "  Password     : 123" -ForegroundColor Yellow
-          Write-Host "  >> Connect via mstsc: $ts_ip" -ForegroundColor Magenta
-          Write-Host "  >> Connect via SSH CMD:" -ForegroundColor Magenta
-          Write-Host "     ssh root@$ts_ip" -ForegroundColor White
-          Write-Host "     ssh runneradmin@$ts_ip" -ForegroundColor White
-          Write-Host "==================================================" -ForegroundColor Green
+        sudo mkdir -p /home/Neotenet/workspace
+        sudo chown -R Neotenet:Neotenet /home/Neotenet
 
-      - name: 5. Keep VPS Alive Forever
-        run: |
-          for ($i = 1; $i -le 2880; $i++) {
-            Start-Sleep -Seconds 60
-          }
+
+    - name: Install AI
+      run: |
+
+        curl -fsSL https://ollama.com/install.sh | sh
+
+        sudo mkdir -p /home/Neotenet/workspace/ollama
+
+        echo "export OLLAMA_MODELS=/home/Neotenet/workspace/ollama" \
+        | sudo tee /etc/profile.d/ollama.sh
+
+
+        ollama serve &
+
+        sleep 10
+
+        ollama pull qwen2.5:3b || true
+
+
+
+    - name: Timer
+      run: |
+
+        sleep 19800
+
+
+
+    - name: Backup
+      if: always()
+      run: |
+
+        sudo tar -czf /tmp/ai-backup.tar.gz \
+        /home/Neotenet \
+        /etc/profile.d/ollama.sh \
+        /usr/local/bin \
+        || true
+
+
+
+    - name: Upload Backup
+      uses: actions/upload-artifact@v4
+      with:
+
+        name: ai-backup-1
+
+        path: /tmp/ai-backup.tar.gz
+
+        retention-days: 1
+
+
+
+  session-2:
+    needs: session-1
+    if: always()
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+
+    steps:
+
+    - uses: actions/checkout@v4
+
+
+    - name: Download Backup
+      uses: actions/download-artifact@v4
+
+      with:
+
+        name: ai-backup-1
+
+        path: /tmp
+
+
+
+    - name: Restore
+
+      run: |
+
+        sudo tar -xzf /tmp/ai-backup.tar.gz -C /
+
+
+
+    - name: Continue AI
+
+      run: |
+
+        curl -fsSL https://ollama.com/install.sh | sh || true
+
+        ollama serve &
+
+        sleep 10
+
+
+
+    - name: Timer
+
+      run: |
+
+        sleep 19800
+
+
+
+    - name: Backup
+
+      if: always()
+
+      run: |
+
+        sudo tar -czf /tmp/ai-backup.tar.gz \
+        /home/Neotenet \
+        /etc/profile.d/ollama.sh \
+        /usr/local/bin \
+        || true
+
+
+
+    - name: Upload
+
+      uses: actions/upload-artifact@v4
+
+      with:
+
+        name: ai-backup-2
+
+        path: /tmp/ai-backup.tar.gz
+
+        retention-days: 1
