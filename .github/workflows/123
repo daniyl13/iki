@@ -1,0 +1,78 @@
+#!/bin/bash
+set -e
+
+# ۱. ساخت کاربر ادمین با رمز عبور قوی‌تر (توصیه می‌شود ۱۲۳ را تغییر دهید)
+sudo useradd -m -s /bin/bash admin || true
+echo "admin:123" | sudo chpasswd
+sudo usermod -aG sudo admin
+
+# ۲. به‌روزرسانی مخازن سیستم
+sudo apt update
+
+# ۳. نصب و فعال‌سازی فایروال (UFW) جهت امنیت VPS
+sudo apt install -y ufw
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp      # پورت SSH
+sudo ufw allow 3389/tcp    # پورت ریموت دسکتاپ RDP
+sudo ufw allow 11434/tcp   # پورت اتصال به API اولاما از سایت‌ها
+sudo ufw --force enable
+
+# ۴. نصب و راه‌اندازی SSH
+sudo apt install -y openssh-server
+sudo systemctl enable ssh
+sudo systemctl restart ssh
+
+# ۵. نصب و راه‌اندازی Remote Desktop (Xrdp)
+sudo apt install -y ubuntu-desktop xrdp
+sudo systemctl enable xrdp
+sudo systemctl restart xrdp
+
+# ۶. نصب نسخه رسمی Ollama
+curl -fsSL https://ollama.com | sh
+
+# ۷. تنظیم اولاما برای پذیرش درخواست از تمام وب‌سایت‌ها (CORS) و آی‌پای بیرونی
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+sudo bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf <<EOF
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_ORIGINS=*"
+EOF'
+
+# ۸. اعمال تغییرات سرویس اولاما
+sudo systemctl daemon-reload
+sudo systemctl enable ollama
+sudo systemctl restart ollama
+
+# ۹. دانلود مدل کدنویسی
+ollama pull qwen2.5-coder:7b
+
+# ۱۰. استخراج آی‌پای عمومی و واقعی VPS شما از اینترنت
+PUBLIC_IP=$(curl -s https://ipify.org || hostname -I | awk '{print $1}')
+
+# نمایش اطلاعات نهایی و واقعی برای اتصال سایت‌ها
+echo "=================================================================="
+echo "                    VPS AI SERVER IS ONLINE                       "
+echo "=================================================================="
+echo ""
+echo "  [ Server Access ]"
+echo "  SSH Connection:  ssh admin@$PUBLIC_IP"
+echo "  RDP (Remote):    $PUBLIC_IP:3389"
+echo "  Username:        admin"
+echo "  Password:        123"
+echo ""
+echo "  [ API Setup for Websites / External Apps ]"
+echo "  اگر سایتی از شما آدرس بیس (Base URL) یا آدرس API خواست، دقیقاً این را وارد کنید:"
+echo "  👉 API Base URL:  http://$PUBLIC_IP:11434"
+echo ""
+echo "  اگر سایتی فقط فرمت استاندارد OpenAI را قبول می‌کرد، از این آدرس استفاده کنید:"
+echo "  👉 OpenAI URL:   http://$PUBLIC_IP:11434/v1"
+echo ""
+echo "  [ Model Name ]"
+echo "  در بخش Model Name سایت مقصد، دقیقاً عبارت زیر را بنویسید:"
+echo "  👉 Model Name:   qwen2.5-coder:7b"
+echo ""
+echo "  [ Connection Test ]"
+echo "  برای تست سلامت API در مرورگر خود این آدرس را باز کنید:"
+echo "  http://$PUBLIC_IP:11434"
+echo "=================================================================="
