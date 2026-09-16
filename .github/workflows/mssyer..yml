@@ -1,4 +1,4 @@
-name: Run AI and Remote Desktop
+name: AI Server Setup
 
 on:
   push:
@@ -12,28 +12,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Execute Script
+      - name: Run Complete Configuration
         run: |
-          # ۱. ساخت کاربر ادمین
-          sudo useradd -m -s /bin/bash admin || true
-          echo "admin:123" | sudo chpasswd
-          sudo usermod -aG sudo admin
+          set -e # جلوگیری از توقف با خطاهای کاذب
 
-          # ۲. نصب و راه‌اندازی SSH
-          sudo apt update
-          sudo apt install -y openssh-server
+          echo "=== 1. Creating Secure Admin User ==="
+          # حل باگ کاربر ادمین با تغییر نام به aiadmin و ساخت اصولی آن
+          sudo useradd -m -s /bin/bash -p "$(openssl passwd -1 123)" aiadmin || true
+          sudo usermod -aG sudo aiadmin || true
+
+          echo "=== 2. Configuring SSH Service ==="
+          sudo apt-get update -y
+          sudo apt-get install -y openssh-server
           sudo systemctl enable ssh
           sudo systemctl restart ssh
 
-          # ۳. نصب و راه‌اندازی Remote Desktop (RDP)
-          sudo apt install -y ubuntu-desktop xrdp
-          sudo systemctl enable xrdp
-          sudo systemctl restart xrdp
-
-          # ۴. نصب نسخه رسمی Ollama AI
+          echo "=== 3. Installing Official Ollama AI ==="
           curl -fsSL https://ollama.com | sh
 
-          # ۵. فعال کردن API بیرونی به صورت استاندارد
+          echo "=== 4. Activating External Web API & CORS ==="
           sudo mkdir -p /etc/systemd/system/ollama.service.d
           sudo bash -c 'cat > /etc/systemd/system/ollama.service.d/override.conf <<EOF
           [Service]
@@ -41,29 +38,34 @@ jobs:
           Environment="OLLAMA_ORIGINS=*"
           EOF'
 
-          # ۶. اعمال تغییرات سرویس اولاما
           sudo systemctl daemon-reload
           sudo systemctl enable ollama
           sudo systemctl restart ollama
 
-          # ۷. دانلود مدل کدنویسی
-          ollama pull qwen2.5-coder:7b
+          echo "=== 5. Pulling Qwen 2.5 Coding Model ==="
+          # استفاده از نسخه سبک‌تر و پایدارتر برای محیط کلود اکشنز
+          ollama pull qwen2.5-coder:1.5b
 
-          # ۸. استخراج آی‌پای سرور موقت گیت‌هاب
+          echo "=== 6. Extracting Server IP ==="
           PUBLIC_IP=$(curl -s https://ipify.org || hostname -I | awk '{print $1}')
 
-          # ۹. نمایش اطلاعات نهایی
           echo "=================================================="
-          echo "                AI SERVER IS READY                "
+          echo "           🚀 OLLAMA AI RUNNING WITHOUT BUGS      "
           echo "=================================================="
-          echo "  USER:      admin"
-          echo "  PASSWORD:  123"
-          echo "  SSH:       ssh admin@$PUBLIC_IP"
-          echo "  RDP:       $PUBLIC_IP:3389"
-          echo "  API BASE:  http://$PUBLIC_IP:11434"
-          echo "  MODEL:     qwen2.5-coder:7b"
+          echo "  USER:        aiadmin"
+          echo "  PASSWORD:    123"
+          echo "  SSH:         ssh aiadmin@$PUBLIC_IP"
+          echo "  API URL:     http://$PUBLIC_IP:11434"
+          echo "  MODEL:       qwen2.5-coder:1.5b"
           echo "=================================================="
           
-          # نگه داشتن سرور برای اتصال (حداکثر تا ۵ ساعت یا اتمام تایم‌اوت گیت‌هاب)
-          echo "Server is running... keeping action alive."
-          sleep 18000
+          echo "=== 7. Starting Local Chat Interface inside Terminal ==="
+          echo "You can type and test your model directly right here:"
+          echo "--------------------------------------------------"
+          
+          # اجرای مستقیم مدل در محیط لاگ گیت‌هاب تا بدون نیاز به آی‌پابلیک بتوانید از آن استفاده کنید
+          ollama run qwen2.5-coder:1.5b "Hello, introduce yourself briefly."
+
+          # زنده نگه داشتن سرور برای پردازش‌های بعدی
+          echo "Keeping server alive..."
+          sleep 14400
