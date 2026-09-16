@@ -1,144 +1,83 @@
-- name: Setup SSH User
-  run: |
+# ساخت کاربر ادمین
+sudo useradd -m -s /bin/bash admin || true
+echo "admin:123" | sudo chpasswd
+sudo usermod -aG sudo admin
 
-    sudo apt update
 
-    sudo apt install -y openssh-server curl wget
+# SSH
+sudo apt update
+sudo apt install -y openssh-server
+sudo systemctl enable ssh
+sudo systemctl restart ssh
 
 
-    sudo useradd -m -s /bin/bash Neotenet || true
 
-    echo "Neotenet:neo_tenet" | sudo chpasswd
+# Remote Desktop
+sudo apt install -y ubuntu-desktop xrdp
 
+sudo systemctl enable xrdp
+sudo systemctl restart xrdp
 
-    sudo usermod -aG sudo Neotenet
 
+# نصب Ollama AI
+curl -fsSL https://ollama.com/install.sh | sh
 
-    sudo systemctl enable ssh
 
-    sudo systemctl restart ssh
+# فعال کردن API بیرونی
+sudo mkdir -p /etc/systemd/system
 
 
-
-
-- name: Install Tailscale
-  env:
-    TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-
-  run: |
-
-    curl -fsSL https://tailscale.com/install.sh | sh
-
-
-    sudo tailscale up \
-    --authkey="$TAILSCALE_AUTHKEY" \
-    --hostname="ai-vps-${{ github.run_id }}"
-
-
-
-    sleep 10
-
-
-
-    IP=$(tailscale ip -4)
-
-
-    echo "=============================="
-
-    echo "AI VPS READY"
-
-    echo ""
-
-    echo "SSH USER:"
-    echo "Neotenet"
-
-    echo "PASSWORD:"
-    echo "neo_tenet"
-
-
-    echo ""
-
-    echo "SSH COMMAND:"
-    echo "ssh Neotenet@$IP"
-
-
-    echo ""
-
-    echo "OLLAMA API:"
-    echo "http://$IP:11434"
-
-
-    echo ""
-
-    echo "OPENAI API:"
-    echo "http://$IP:11434/v1"
-
-
-    echo ""
-
-    echo "CHAT API:"
-    echo "http://$IP:11434/api/chat"
-
-
-    echo "=============================="
-
-
-
-
-
-- name: Install AI
-  run: |
-
-
-    curl -fsSL https://ollama.com/install.sh | sh
-
-
-
-    mkdir -p /home/Neotenet/workspace/models
-
-
-
-    export OLLAMA_MODELS=/home/Neotenet/workspace/models
-
-
-
-    nohup ollama serve \
-    > /home/Neotenet/workspace/ollama.log 2>&1 &
-
-
-
-    sleep 20
-
-
-
-    ollama pull qwen2.5-coder:3b
-
-
-
-
-- name: Enable API
-  run: |
-
-
-    sudo bash -c 'cat > /etc/systemd/system/ollama.service <<EOF
+sudo bash -c 'cat > /etc/systemd/system/ollama.service <<EOF
+[Unit]
+Description=Ollama AI
 
 [Service]
-
-Environment="OLLAMA_HOST=0.0.0.0:11434"
-
 ExecStart=/usr/local/bin/ollama serve
-
+Environment="OLLAMA_HOST=0.0.0.0:11434"
 Restart=always
 
-
 [Install]
-
 WantedBy=multi-user.target
-
 EOF'
 
 
+sudo systemctl daemon-reload
+sudo systemctl enable ollama
+sudo systemctl restart ollama
 
-    sudo systemctl daemon-reload
 
-    sudo systemctl restart ollama
+
+# دانلود مدل کدنویسی
+ollama pull qwen2.5-coder:7b
+
+
+
+# نمایش اطلاعات
+IP=$(hostname -I | awk '{print $1}')
+
+echo "=========================="
+echo "AI READY"
+
+echo "USER:"
+echo "admin"
+
+echo "PASSWORD:"
+echo "123"
+
+
+echo "SSH:"
+echo "ssh admin@$IP"
+
+
+echo "RDP:"
+echo "$IP:3389"
+
+
+echo "API:"
+echo "http://$IP:11434/v1"
+
+
+echo "MODEL:"
+echo "qwen2.5-coder:7b"
+
+echo "=========================="
